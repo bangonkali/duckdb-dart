@@ -70,7 +70,16 @@ workflows:
             #!/bin/bash
             set -e
             echo "Installing Ninja, CMake, pkg-config..."
-            sudo apt-get update && sudo apt-get install -y ninja-build cmake pkg-config autoconf automake libtool
+                        sudo apt-get update && sudo apt-get install -y ninja-build cmake pkg-config autoconf automake libtool
+
+                        # Ensure the ninja binary is on PATH (some stacks only ship /usr/bin)
+                        if ! command -v ninja >/dev/null 2>&1; then
+                            if [ -x /usr/bin/ninja ]; then
+                                sudo ln -sf /usr/bin/ninja /usr/local/bin/ninja
+                            fi
+                        fi
+
+                        echo "ninja located at: $(command -v ninja)"
 
             echo "Installing vcpkg..."
             git clone https://github.com/Microsoft/vcpkg.git $HOME/vcpkg
