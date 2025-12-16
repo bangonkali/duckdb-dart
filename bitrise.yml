@@ -52,7 +52,6 @@ workflows:
     - deploy-to-bitrise-io:
         inputs:
         - pipeline_intermediate_files: "$BITRISE_DEPLOY_DIR/DuckDB.xcframework.zip:IOS_FRAMEWORK_ZIP_PATH"
-
   build-android-binaries:
     summary: Build Android binaries
     description: Installs dependencies and builds DuckDB native libraries for Android.
@@ -102,26 +101,28 @@ workflows:
             #!/bin/bash
             set -e
             cd android/src/main/jniLibs
-            
+
             # Zip arm64-v8a
             if [ -d "arm64-v8a" ]; then
                 zip -j $BITRISE_DEPLOY_DIR/libduckdb-android_arm64-v8a.zip arm64-v8a/libduckdb.so
             fi
-            
+
             # Zip x86_64
             if [ -d "x86_64" ]; then
                 zip -j $BITRISE_DEPLOY_DIR/libduckdb-android_x86_64.zip x86_64/libduckdb.so
             fi
-            
+
             # Just in case, also create a combined zip if needed for debug
             zip -r $BITRISE_DEPLOY_DIR/android-all-libs.zip .
     - deploy-to-bitrise-io:
         inputs:
-        # We pass the paths that might exist.
         - pipeline_intermediate_files: |-
             $BITRISE_DEPLOY_DIR/libduckdb-android_arm64-v8a.zip:ANDROID_ARM64_ZIP
             $BITRISE_DEPLOY_DIR/libduckdb-android_x86_64.zip:ANDROID_X64_ZIP
-
+    meta:
+      bitrise.io:
+        stack: ubuntu-noble-24.04-bitrise-2025-android
+        machine_type_id: elite
   release:
     summary: Publish to GitHub Releases
     description: Downloads artifacts and publishes to GitHub Releases.
@@ -139,7 +140,7 @@ workflows:
         - name: "$BITRISE_GIT_TAG"
         - body: |
             Automated release from Bitrise build $BITRISE_BUILD_NUMBER
-            
+
             Includes:
             - Spatial, VSS, DuckPGQ, ICU, Parquet, JSON, InetExtensions
             - iOS: DuckDB.xcframework
@@ -153,7 +154,6 @@ workflows:
       bitrise.io:
         stack: ubuntu-noble-24.04-bitrise-2025-android
         machine_type_id: elite
-
 pipelines:
   build-publish:
     workflows:
