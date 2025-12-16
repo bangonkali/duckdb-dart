@@ -1,0 +1,160 @@
+---
+format_version: '23'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: flutter
+trigger_map:
+- tag: v*
+  pipeline: build-publish
+workflows:
+  build-ios-binaries:
+    summary: Build iOS binaries
+    description: Installs dependencies and builds DuckDB native libraries for iOS.
+    steps:
+    - git-clone:
+        inputs:
+        - fetch_tags: 'yes'
+    - activate-ssh-key:
+        inputs:
+        - ssh_rsa_private_key: "$GITHUB_PRIVATE_KEY"
+    - script:
+        title: Install Dependencies (Ninja, CMake, vcpkg)
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -e
+            echo "Installing Ninja and CMake..."
+            brew install ninja cmake
+
+            echo "Installing vcpkg..."
+            git clone https://github.com/Microsoft/vcpkg.git $HOME/vcpkg
+            $HOME/vcpkg/bootstrap-vcpkg.sh
+
+            # Expose VCPKG_ROOT for subsequent steps
+            envman add --key VCPKG_ROOT --value "$HOME/vcpkg"
+    - script:
+        title: Build iOS Binaries
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -e
+            export VCPKG_ROOT="$HOME/vcpkg"
+            echo "Building iOS binaries..."
+            ./scripts/build-ios.sh
+    - script:
+        title: Zip iOS Artifacts
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -e
+            cd ios/Frameworks
+            # Create zip expected by release workflow
+            zip -r $BITRISE_DEPLOY_DIR/DuckDB.xcframework.zip DuckDB.xcframework
+    - deploy-to-bitrise-io:
+        inputs:
+        - pipeline_intermediate_files: "$BITRISE_DEPLOY_DIR/DuckDB.xcframework.zip:IOS_FRAMEWORK_ZIP_PATH"
+
+  build-android-binaries:
+    summary: Build Android binaries
+    description: Installs dependencies and builds DuckDB native libraries for Android.
+    steps:
+    - git-clone:
+        inputs:
+        - fetch_tags: 'yes'
+    - activate-ssh-key:
+        inputs:
+        - ssh_rsa_private_key: "$GITHUB_PRIVATE_KEY"
+    - script:
+        title: Install Dependencies (Ninja, CMake, vcpkg)
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -e
+            echo "Installing Ninja, CMake, pkg-config..."
+            sudo apt-get update && sudo apt-get install -y ninja-build cmake pkg-config autoconf automake libtool
+
+            echo "Installing vcpkg..."
+            git clone https://github.com/Microsoft/vcpkg.git $HOME/vcpkg
+            $HOME/vcpkg/bootstrap-vcpkg.sh
+
+            envman add --key VCPKG_ROOT --value "$HOME/vcpkg"
+    - script:
+        title: Build Android Binaries
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -e
+            export VCPKG_ROOT="$HOME/vcpkg"
+            echo "Building Android binaries..."
+            ./scripts/build-android.sh
+    - script:
+        title: Zip Android Artifacts
+        inputs:
+        - content: |
+            #!/bin/bash
+            set -e
+            cd android/src/main/jniLibs
+            
+            # Zip arm64-v8a
+            if [ -d "arm64-v8a" ]; then
+                zip -j $BITRISE_DEPLOY_DIR/libduckdb-android_arm64-v8a.zip arm64-v8a/libduckdb.so
+            fi
+            
+            # Zip x86_64
+            if [ -d "x86_64" ]; then
+                zip -j $BITRISE_DEPLOY_DIR/libduckdb-android_x86_64.zip x86_64/libduckdb.so
+            fi
+            
+            # Just in case, also create a combined zip if needed for debug
+            zip -r $BITRISE_DEPLOY_DIR/android-all-libs.zip .
+    - deploy-to-bitrise-io:
+        inputs:
+        # We pass the paths that might exist.
+        - pipeline_intermediate_files: |-
+            $BITRISE_DEPLOY_DIR/libduckdb-android_arm64-v8a.zip:ANDROID_ARM64_ZIP
+            $BITRISE_DEPLOY_DIR/libduckdb-android_x86_64.zip:ANDROID_X64_ZIP
+
+  release:
+    summary: Publish to GitHub Releases
+    description: Downloads artifacts and publishes to GitHub Releases.
+    steps:
+    - git-clone:
+        inputs:
+        - fetch_tags: 'yes'
+    - pull-intermediate-files: {}
+    - github-release:
+        inputs:
+        - api_token: "$GITHUB_ACCESS_TOKEN"
+        - username: "$GITHUB_USERNAME"
+        - repository_url: https://github.com/TigerEyeLabs/duckdb-dart
+        - tag: "$BITRISE_GIT_TAG"
+        - name: "$BITRISE_GIT_TAG"
+        - body: |
+            Automated release from Bitrise build $BITRISE_BUILD_NUMBER
+            
+            Includes:
+            - Spatial, VSS, DuckPGQ, ICU, Parquet, JSON, InetExtensions
+            - iOS: DuckDB.xcframework
+            - Android: libduckdb.so (arm64-v8a, x86_64)
+        - draft: 'no'
+        - files_to_upload: |-
+            $IOS_FRAMEWORK_ZIP_PATH
+            $ANDROID_ARM64_ZIP
+            $ANDROID_X64_ZIP
+    meta:
+      bitrise.io:
+        stack: ubuntu-noble-24.04-bitrise-2025-android
+        machine_type_id: elite
+
+pipelines:
+  build-publish:
+    workflows:
+      build-ios-binaries: {}
+      build-android-binaries: {}
+      release:
+        depends_on:
+        - build-ios-binaries
+        - build-android-binaries
+meta:
+  bitrise.io:
+    stack: osx-xcode-16.4.x
+    machine_type_id: g2.mac.large
