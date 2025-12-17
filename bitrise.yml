@@ -167,3 +167,8 @@ meta:
   bitrise.io:
     stack: osx-xcode-16.4.x
     machine_type_id: g2.mac.large
+app:
+  envs:
+  - GITHUB_RELEASE_REPO: https://github.com/bangonkali/duckdb-dart
+    opts:
+      is_expand: false
