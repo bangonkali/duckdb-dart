@@ -135,7 +135,7 @@ workflows:
         inputs:
         - api_token: "$GITHUB_ACCESS_TOKEN"
         - username: "$GITHUB_USERNAME"
-        - repository_url: https://github.com/TigerEyeLabs/duckdb-dart
+        - repository_url: "$GITHUB_RELEASE_REPO"
         - tag: "$BITRISE_GIT_TAG"
         - name: "$BITRISE_GIT_TAG"
         - body: |
